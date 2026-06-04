@@ -79,7 +79,7 @@ def trailing_vol_raw(daily: pd.DataFrame, asof_date,
     asof = pd.Timestamp(asof_date)
     hist = daily.loc[:asof]                 # strictly <= t (no future data)
     hist = hist.iloc[-(window_days + 1):]   # last ~12 months of prices
-    rets = hist.pct_change()
+    rets = hist.pct_change(fill_method=None)   # do NOT pad NaNs (avoids look-ahead)
     vol = rets.std(ddof=0) * np.sqrt(252.0)
     enough = rets.notna().sum() >= min_obs  # require sufficient history
     vol = vol.where(enough)
