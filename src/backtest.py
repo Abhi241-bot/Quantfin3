@@ -98,6 +98,73 @@ def backtest_weights(weight_panel: pd.DataFrame, monthly_prices: pd.DataFrame,
 
 
 # --------------------------------------------------------------------------- #
+# Beta-neutral overlay (stretch goal): point-in-time index hedge
+# --------------------------------------------------------------------------- #
+def trailing_betas(daily: pd.DataFrame, bench_daily: pd.Series, asof,
+                   window: int = 252, min_obs: int = 120) -> pd.Series:
+    """
+    Each stock's market beta from trailing daily returns ENDING AT asof (data
+    <= t only). beta_i = cov(r_i, r_m) / var(r_m) over the overlapping window.
+    Stocks with < min_obs overlapping observations are omitted.
+    """
+    asof = pd.Timestamp(asof)
+    r = daily.loc[:asof].iloc[-(window + 1):].pct_change(fill_method=None)
+    rb = bench_daily.loc[:asof].iloc[-(window + 1):].pct_change(fill_method=None)
+    rb = rb.reindex(r.index)
+
+    betas = {}
+    for c in r.columns:
+        pair = pd.concat([r[c], rb], axis=1).dropna()
+        if len(pair) >= min_obs:
+            cov = pair.cov()
+            var_m = cov.iloc[1, 1]
+            if var_m > 0:
+                betas[c] = cov.iloc[0, 1] / var_m
+    return pd.Series(betas, dtype=float)
+
+
+def backtest_weights_hedged(weight_panel: pd.DataFrame, monthly_prices: pd.DataFrame,
+                            daily: pd.DataFrame, benchmark: pd.Series,
+                            cost_bps: float = COST_BPS) -> pd.DataFrame:
+    """
+    Backtest the weight panel AND overlay a point-in-time beta hedge.
+
+    At each rebalance t: portfolio beta = sum_i w_i(t) * beta_i(t) (trailing,
+    data <= t). Hold a benchmark position of -beta_p(t) over (t, t+1] so the net
+    book beta is ~0. The hedge is re-traded each month (its turnover is costed at
+    the same bps). Adds columns: hedge_beta, hedge_ret, hedge_cost, net_ret_hedged,
+    net_equity_hedged to the unhedged backtest frame.
+    """
+    base = backtest_weights(weight_panel, monthly_prices, cost_bps=cost_bps)
+    cost_per_side = cost_bps / 1e4
+    mi = monthly_prices.index
+    bench_ret_m = benchmark.resample("ME").last().pct_change(fill_method=None)
+
+    prev_hedge = 0.0
+    rows = []
+    for d in weight_panel.index:
+        w = weight_panel.loc[d]
+        betas = trailing_betas(daily, benchmark, d)
+        # unknown betas contribute 0 (slight under-hedge; documented)
+        pbeta = float((w * betas.reindex(w.index).fillna(0.0)).sum())
+        hedge_w = -pbeta                              # benchmark weight to add
+
+        end = _next_month_end(mi, d)
+        br = bench_ret_m.get(end, np.nan)
+        hedge_ret = hedge_w * (0.0 if pd.isna(br) else br)
+        hedge_cost = abs(hedge_w - prev_hedge) * cost_per_side
+        rows.append((end, pbeta, hedge_ret, hedge_cost))
+        prev_hedge = hedge_w
+
+    h = pd.DataFrame(rows, columns=["date", "hedge_beta", "hedge_ret",
+                                    "hedge_cost"]).set_index("date")
+    out = base.join(h)
+    out["net_ret_hedged"] = out["net_ret"] + out["hedge_ret"] - out["hedge_cost"]
+    out["net_equity_hedged"] = (1.0 + out["net_ret_hedged"]).cumprod()
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Benchmark buy-and-hold over the same dates
 # --------------------------------------------------------------------------- #
 def benchmark_returns(benchmark: pd.Series, on_dates: pd.DatetimeIndex) -> pd.Series:

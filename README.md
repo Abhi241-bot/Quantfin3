@@ -25,9 +25,11 @@ full per-factor attribution.
 annualized (Sharpe 0.86)**. The strategy was a *market-neutral* book, so it is not designed to
 capture the market's +178% — but it genuinely lost money over this sample. **Crucially, the
 benchmark regression shows the composite earned a positive +3.1% annualized alpha with a
-beta of −0.66**: the signals added value, but an un-hedged **short-beta tilt (driven by the
-low-volatility leg) dominated and bled during a strong high-beta bull market.** See
-[Results](#results) and [Limitations](#limitations--honest-discussion).
+beta of −0.66**: an un-hedged **short-beta tilt (driven by the low-volatility leg) dominated and bled
+during a strong high-beta bull market.** Adding a **point-in-time beta hedge** (stretch goal)
+neutralizes that tilt (beta → −0.11, drawdown −61% → −46%) but also shows the residual alpha is only
+**+0.7%** — i.e. the static-regression alpha was largely an artifact, and the blend was roughly flat
+once properly hedged. See [Results](#results) and [Limitations](#limitations--honest-discussion).
 
 > **One honest sentence on data:** the backtest uses *today's* Nifty 100 list and a
 > price-based value *proxy* (no point-in-time fundamentals), so results carry survivorship
@@ -91,6 +93,7 @@ All figures in `results/`. Metrics table in `results/metrics_summary.csv`.
 | Low Volatility | −11.3% | 21.1% | **−0.46** | −0.44 | −0.51 | −69% | −0.16 | +0.6% | **−0.71** | 0.04 | 18.3% |
 | Value (proxy) | −1.8% | 15.4% | **−0.04** | −0.00 | −0.12 | −51% | −0.04 | +1.1% | −0.12 | 0.07 | 25.1% |
 | **Composite** | **−8.1%** | 20.0% | **−0.32** | −0.27 | −0.37 | −61% | −0.13 | **+3.1%** | **−0.66** | 0.18 | 40.6% |
+| **Composite (beta-hedged)** | **−2.3%** | 16.3% | **−0.06** | — | −0.13 | −46% | −0.05 | **+0.7%** | **−0.11** | 0.04 | 40.6% |
 | Benchmark (N100) | +13.8% | 16.7% | **0.86** | 0.86 | 0.80 | −29% | 0.48 | — | 1.00 | — | — |
 
 **Cost drag:** costs cut the composite Sharpe from **−0.27 (gross) to −0.32 (net)**; total cost
@@ -107,6 +110,22 @@ The standalone backtests (`factor_attribution.png`) decompose the combined resul
 Inter-factor correlation of the standalone **net return** streams is low — momentum↔low-vol 0.25,
 momentum↔value 0.04, low-vol↔value −0.13 — i.e. the factors are genuinely diversifying. The
 combined book's high volatility (20%) is inherited mainly from the low-vol leg.
+
+### Beta-neutral overlay (stretch goal — and the most honest result in the project)
+
+The composite is dollar-neutral but **not** beta-neutral; the low-vol leg makes it structurally
+short beta (−0.66), which explains the bulk of the loss in a bull market. To isolate alpha I added
+a **point-in-time beta hedge**: at each rebalance, each stock's beta is estimated from trailing
+daily returns (data ≤ *t*, no look-ahead), the book's net beta is computed, and a benchmark position
+of `−β_p(t)` is held over the next month (its turnover is costed at the same 10 bps).
+
+The hedge does what it should — net beta drops from **−0.66 → −0.11**, volatility from **20% → 16%**,
+max drawdown from **−61% → −46%**, and Sharpe from **−0.32 → −0.06** (roughly flat). **But the
+crucial, honest reveal:** the residual point-in-time alpha is only **+0.7%**, not the +3.1% that the
+*static full-sample* regression suggested. Much of that apparent alpha was an artifact of fitting a
+single constant beta to a *time-varying* market exposure. **Hedged properly, month-by-month, this
+factor blend produced approximately zero alpha in this sample** — a result I am reporting straight
+rather than dressing up. (The hedged equity curve is the purple dash-dot line in `equity_curves.png`.)
 
 ### Regime dependence (rolling Sharpe)
 
@@ -151,7 +170,7 @@ and low-vol legs dive deeply negative around the **2020–2021 post-COVID high-b
   sector bets.
 
 ### What I would add next
-- **Beta hedging / beta-neutral construction** (overlay an index hedge so the residual is pure alpha) — given the +3.1% composite alpha, this is the single highest-value fix.
+- ~~**Beta hedging / beta-neutral construction**~~ — **done** (see the beta-neutral overlay above). It cut beta to ≈0 and revealed the static-regression alpha was largely illusory.
 - **Sector / industry neutralization** (rank within sectors).
 - **Risk-based weighting** (inverse-vol or risk-parity) instead of equal weight.
 - A **quality** factor (ROE, low leverage) for a 4-factor model.

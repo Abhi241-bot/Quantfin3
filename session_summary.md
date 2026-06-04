@@ -33,11 +33,12 @@
 | Low Vol | −11.3% | **−0.46** | −0.44 | +0.6% | **−0.71** | 0.04 | −69% | 18.3% |
 | Value (proxy) | −1.8% | **−0.04** | −0.00 | +1.1% | −0.12 | 0.07 | −51% | 25.1% |
 | **Composite** | **−8.1%** | **−0.32** | −0.27 | **+3.1%** | **−0.66** | 0.18 | −61% | 40.6% |
+| **Composite (beta-hedged)** | **−2.3%** | **−0.06** | — | **+0.7%** | **−0.11** | 0.04 | −46% | 40.6% |
 | Benchmark N100 | +13.8% | **0.86** | 0.86 | — | 1.00 | — | −29% | — |
 
 - **Cost drag:** composite Sharpe −0.27 (gross) → −0.32 (net); ~7.7% of capital total.
 - **IC (1-month, full sample):** momentum +0.020 (peaks ~3–4m), low_vol −0.010 (deepens with horizon), value −0.006 at 1m but **+0.05 by 12m** (slow long-horizon reversal).
-- **Headline narrative:** market-neutral book lost money, BUT composite has **+3.1% alpha vs −0.66 beta** — signals add value; an un-hedged short-beta tilt (low-vol leg) bled in a high-beta bull market. Honest, defensible, fully attributed.
+- **Headline narrative:** market-neutral book lost money. A static regression flatters it (+3.1% alpha, −0.66 beta), but the **point-in-time beta hedge** cuts beta to −0.11 (vol 20→16%, DD −61→−46%, Sharpe −0.32→−0.06) and reveals residual alpha is only **+0.7%** — the static alpha was largely an artifact; properly hedged the blend is roughly flat. Honest, defensible, fully attributed.
 
 ---
 
@@ -56,14 +57,14 @@
 
 ## 4. Where to pick up next session
 
-**The project is complete and all deliverables are pushed.** If continuing, the highest-value
-**stretch goals** (in priority order) are:
+**The project is complete (incl. the beta-neutral stretch goal) and all deliverables are pushed.**
+If continuing, remaining **stretch goals** (in priority order) are:
 
-1. **Beta-neutral construction / index hedge** — the single best fix. Composite has +3.1% alpha but
-   −0.66 beta; overlay a Nifty 100 hedge to isolate the alpha. Add to `portfolio.py` (scale legs to
-   net-beta 0 using trailing betas) → re-run `metrics.py`/`analysis.py`. *Start here.*
+1. ✅ **DONE — Beta-neutral construction / index hedge.** Implemented in `backtest.py`
+   (`trailing_betas`, `backtest_weights_hedged`); point-in-time hedge cuts beta −0.66 → −0.11 and
+   shows residual alpha is only +0.7%. Surfaced in `metrics.py`, `analysis.py`, README, notebook.
 2. **Sector neutralization** — rank within GICS/NSE sector buckets in `factors.py` so the book isn't
-   an accidental sector bet. Needs a sector-map (hardcode for Nifty 100 or pull from yfinance `.info`).
+   an accidental sector bet. Needs a sector-map (hardcode for Nifty 100 or pull from yfinance `.info`). *Start here.*
 3. **Risk-based weighting** — inverse-vol weights within legs instead of equal-weight (`rank_to_weights`).
 4. **Quality factor** (ROE, low leverage) for a 4-factor model — requires fundamentals (data gap caveat).
 5. **Fama-MacBeth regressions** — cross-sectional factor significance test (`metrics.py`).

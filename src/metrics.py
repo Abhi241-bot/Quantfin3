@@ -28,8 +28,8 @@ import pandas as pd
 import statsmodels.api as sm
 
 from portfolio import build_all_panels
-from backtest import (backtest_weights, benchmark_returns, COST_BPS,
-                      RF_ANNUAL, PERIODS_PER_YEAR)
+from backtest import (backtest_weights, backtest_weights_hedged,
+                      benchmark_returns, COST_BPS, RF_ANNUAL, PERIODS_PER_YEAR)
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(os.path.dirname(_THIS_DIR), "results")
@@ -123,11 +123,28 @@ def summarize(name: str, res: pd.DataFrame, bench_ret: pd.Series) -> dict:
 # --------------------------------------------------------------------------- #
 # Full attribution: every factor + composite + benchmark
 # --------------------------------------------------------------------------- #
+def summarize_hedged(res_h: pd.DataFrame, bench_ret: pd.Series) -> dict:
+    """Summary row for the beta-hedged composite (uses net_ret_hedged)."""
+    m = perf_metrics(res_h["net_ret_hedged"])
+    reg = regression_metrics(res_h["net_ret_hedged"], bench_ret)
+    total_cost = res_h["cost"].sum() + res_h["hedge_cost"].sum()
+    return {
+        "strategy": "composite_hedged",
+        "ann_return_net": m["ann_return"], "ann_vol_net": m["ann_vol"],
+        "sharpe_net": m["sharpe"], "sharpe_gross": np.nan,
+        "cost_drag_sharpe": np.nan, "sortino_net": m["sortino"],
+        "max_dd_net": m["max_dd"], "calmar_net": m["calmar"],
+        "alpha_ann": reg["alpha_ann"], "beta": reg["beta"], "info_ratio": reg["ir"],
+        "avg_turnover": res_h["turnover"].mean(), "total_cost": total_cost,
+    }
+
+
 def attribution(daily: pd.DataFrame, monthly: pd.DataFrame, benchmark: pd.Series,
                 cost_bps: float = COST_BPS):
     """
-    Backtest each factor standalone + the composite, regress vs benchmark, and
-    return (summary_table, net_return_streams, factor_correlation).
+    Backtest each factor standalone + the composite + a beta-hedged composite,
+    regress vs benchmark, and return
+    (summary_table, net_return_streams, factor_correlation, hedged_result).
     """
     panels = build_all_panels(daily, monthly)
 
@@ -141,11 +158,16 @@ def attribution(daily: pd.DataFrame, monthly: pd.DataFrame, benchmark: pd.Series
         results[name] = res
         net_streams[name] = res["net_ret"]
 
+    # beta-neutral overlay on the composite (stretch goal)
+    hedged = backtest_weights_hedged(panels["composite"], monthly, daily,
+                                     benchmark, cost_bps=cost_bps)
+    net_streams["composite_hedged"] = hedged["net_ret_hedged"]
+
     rows = [summarize(name, results[name], bench_ret)
             for name in ["momentum", "low_vol", "value", "composite"]]
+    rows.append(summarize_hedged(hedged, bench_ret))
 
     # benchmark as its own row (long-only buy-and-hold; beta=1, alpha=0 by defn)
-    bench_only = pd.DataFrame({"net_ret": bench_ret, "gross_ret": bench_ret})
     b = perf_metrics(bench_ret)
     rows.append({
         "strategy": "benchmark_N100",
@@ -160,7 +182,7 @@ def attribution(daily: pd.DataFrame, monthly: pd.DataFrame, benchmark: pd.Series
     table = pd.DataFrame(rows).set_index("strategy")
     net_df = pd.DataFrame(net_streams)
     factor_corr = net_df[["momentum", "low_vol", "value"]].corr()
-    return table, net_df, factor_corr
+    return table, net_df, factor_corr, hedged
 
 
 if __name__ == "__main__":
@@ -170,7 +192,7 @@ if __name__ == "__main__":
     monthly = to_month_end(daily)
     bench = load_benchmark()
 
-    table, net_df, factor_corr = attribution(daily, monthly, bench)
+    table, net_df, factor_corr, _hedged = attribution(daily, monthly, bench)
 
     pd.set_option("display.width", 160, "display.max_columns", 20)
     print(f"\nMETRICS SUMMARY (net of {COST_BPS:.0f} bps/side, rf={RF_ANNUAL:.0%})")

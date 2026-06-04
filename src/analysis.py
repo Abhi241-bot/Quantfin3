@@ -31,13 +31,15 @@ from scipy.stats import spearmanr
 from data_loader import load_prices, to_month_end, load_benchmark
 from factors import FACTOR_NAMES, factor_scores
 from portfolio import build_all_panels, rebalance_dates
-from backtest import (backtest_weights, benchmark_returns, monthly_returns,
-                      COST_BPS, PERIODS_PER_YEAR, RF_ANNUAL)
+from backtest import (backtest_weights, backtest_weights_hedged,
+                      benchmark_returns, monthly_returns,
+                      COST_BPS, PERIODS_PER_YEAR)
 from metrics import summarize, RESULTS_DIR
 
 SIGNALS = FACTOR_NAMES + ["composite"]
 _COLORS = {"momentum": "tab:blue", "low_vol": "tab:orange",
-           "value": "tab:green", "composite": "black", "benchmark": "tab:red"}
+           "value": "tab:green", "composite": "black",
+           "composite_hedged": "tab:purple", "benchmark": "tab:red"}
 
 
 # --------------------------------------------------------------------------- #
@@ -53,6 +55,16 @@ def run_all(daily, monthly, benchmark, cost_bps=COST_BPS):
             bench_ret = benchmark_returns(benchmark, res.index)
         results[name] = res
         net_streams[name] = res["net_ret"]
+
+    # beta-neutral overlay on the composite (stretch goal)
+    hedged = backtest_weights_hedged(panels["composite"], monthly, daily,
+                                     benchmark, cost_bps=cost_bps)
+    results["composite_hedged"] = (
+        hedged[["net_ret_hedged", "net_equity_hedged"]]
+        .rename(columns={"net_ret_hedged": "net_ret",
+                         "net_equity_hedged": "net_equity"}))
+    net_streams["composite_hedged"] = hedged["net_ret_hedged"]
+
     bench_equity = (1 + bench_ret.fillna(0.0)).cumprod()
     return results, pd.DataFrame(net_streams), bench_ret, bench_equity
 
@@ -62,10 +74,14 @@ def run_all(daily, monthly, benchmark, cost_bps=COST_BPS):
 # --------------------------------------------------------------------------- #
 def plot_equity_curves(results, bench_equity, path):
     fig, ax = plt.subplots(figsize=(11, 6))
-    for name in SIGNALS:
+    curves = SIGNALS + (["composite_hedged"] if "composite_hedged" in results else [])
+    for name in curves:
         eq = results[name]["net_equity"]
-        ax.plot(eq.index, eq.values, label=f"{name} (net)",
-                color=_COLORS[name], lw=2 if name == "composite" else 1.3)
+        label = f"{name} (net)" if name != "composite_hedged" \
+            else "composite (beta-hedged)"
+        ax.plot(eq.index, eq.values, label=label, color=_COLORS[name],
+                lw=2 if name in ("composite", "composite_hedged") else 1.3,
+                ls="-." if name == "composite_hedged" else "-")
     ax.plot(bench_equity.index, bench_equity.values, label="benchmark N100",
             color=_COLORS["benchmark"], lw=1.6, ls="--")
     ax.axhline(1.0, color="grey", lw=0.8, ls=":")
