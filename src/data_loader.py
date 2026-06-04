@@ -19,9 +19,7 @@ Design notes / discipline:
 from __future__ import annotations
 
 import os
-import time
 
-import numpy as np
 import pandas as pd
 
 # --------------------------------------------------------------------------- #
@@ -70,7 +68,7 @@ def to_yf_tickers(symbols: list[str]) -> list[str]:
 # Download / cache
 # --------------------------------------------------------------------------- #
 def download_prices(
-    start: str = "2016-06-01",
+    start: str = "2011-06-01",
     end: str = "2024-12-31",
     symbols: list[str] | None = None,
     force: bool = False,
@@ -78,8 +76,13 @@ def download_prices(
     """
     Download daily adjusted-close prices and cache to data/prices.csv.
 
-    We start 2016-06 (not 2017-01) so the first real rebalance in 2017 already
-    has a full 12-month trailing window for momentum / low-vol (no warm-up gap).
+    We start 2011-06 (not 2017-01) so the first real rebalance in 2017 already
+    has the full trailing windows for EVERY factor with no warm-up gap:
+      - momentum needs 12 months, low-vol needs ~12 months,
+      - value (60-12 long-term reversal) needs 60 months.
+    A 2017 start therefore requires history back to ~2012, and 2011-06 gives a
+    safety margin. Names that IPO'd later simply carry NaNs until they have
+    enough history (handled per-date downstream -- no backfilling).
 
     Returns a wide DataFrame: index = date, columns = ticker, values = close.
     """
@@ -145,7 +148,7 @@ def load_prices() -> pd.DataFrame:
 # Benchmark
 # --------------------------------------------------------------------------- #
 def download_benchmark(
-    start: str = "2016-06-01",
+    start: str = "2011-06-01",
     end: str = "2024-12-31",
     force: bool = False,
 ) -> pd.Series:
