@@ -21,7 +21,6 @@ DISCIPLINE -- look-ahead avoidance:
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 from factors import FACTOR_NAMES, factor_scores
@@ -102,6 +101,30 @@ def build_weight_panel(daily: pd.DataFrame, monthly: pd.DataFrame,
     panel = panel.reindex(columns=monthly.columns).fillna(0.0)
     panel.index.name = "rebalance_date"
     return panel
+
+
+def build_all_panels(daily: pd.DataFrame, monthly: pd.DataFrame,
+                     quantile: float = QUANTILE, start: str = BACKTEST_START
+                     ) -> dict[str, pd.DataFrame]:
+    """
+    Build weight panels for every signal (each factor + composite) in a SINGLE
+    pass over the rebalance dates -- factor_scores is computed once per date
+    instead of once per signal. Returns {signal_name: weight_panel}.
+    """
+    signals = FACTOR_NAMES + ["composite"]
+    dates = rebalance_dates(monthly, start=start)
+    rows = {s: {} for s in signals}
+    for d in dates:
+        scores = factor_scores(daily, monthly, d)
+        for s in signals:
+            rows[s][d] = rank_to_weights(scores[s], quantile=quantile)
+
+    panels = {}
+    for s in signals:
+        panel = pd.DataFrame(rows[s]).T.reindex(columns=monthly.columns).fillna(0.0)
+        panel.index.name = "rebalance_date"
+        panels[s] = panel
+    return panels
 
 
 if __name__ == "__main__":
